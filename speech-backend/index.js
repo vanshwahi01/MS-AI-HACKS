@@ -1,133 +1,132 @@
 const express = require('express');
 const cors = require('cors');
-const multer = require('multer')
-const FormData = require('form-data');
-const { Readable } = require('stream');
-const axios = require('axios');
-const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('ffmpeg-static');
-const ffmetadata = require('ffmetadata');
+const multer = require('multer');
+const mongoose = require('mongoose');
+const bodyParser = require('body-parser');
+const { exec } = require('child_process');
 const fs = require('fs');
+const ffmpegPath = require('ffmpeg-static');
+const ffmpeg = require('fluent-ffmpeg');
+const fetch = require('node-fetch'); // Use node-fetch to align with your requirement
+require('dotenv').config();
 
 const app = express();
 
+// Enable CORS
 app.use(cors());
 
-const bufferToStream = (buffer) => {
-    return Readable.from(buffer);
-}
+app.use(bodyParser.json());
 
-/**
- * Convert a time string of the format 'mm:ss' into seconds.
- * @param {string} timeString - A time string in the format 'mm:ss'.
- * @return {number} - The time in seconds.
- */
-const parseTimeStringToSeconds = timeString => {
-    const [minutes, seconds] = timeString.split(':').map(tm => parseInt(tm));
-    return minutes * 60 + seconds;
-}
+const connectionString = 'mongodb+srv://cosmicworksadmin:6476489758Dan@dghq5z6zfvye5vk-mongo.mongocluster.cosmos.azure.com/?tls=true&authMechanism=SCRAM-SHA-256&retrywrites=false&maxIdleTimeMS=120000';
 
-const upload = multer();
-ffmpeg.setFfmpegPath(ffmpegPath);
-app.use(express.json());
+mongoose.connect(connectionString, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.error('Could not connect to MongoDB', err));
 
-app.get('/', (req, res) => {
-    res.send('Welcome to the Whisper Text-to-Speech API!');
+const userSchema = new mongoose.Schema({
+  name: String,
+  language: String,
 });
 
+const User = mongoose.model('User', userSchema);
 
+app.get('/', (req, res) => {
+  res.send('Welcome to the Whisper Text-to-Speech API!');
+});
 
+app.post('/api/login', async (req, res) => {
+  const { name, language } = req.body;
 
-app.post('/api/transcribe', upload.single('file'), async (req, res) => {
-    const audioFile = req.file;
-    const startTime = req.body.startTime;
-    const endTime = req.body.endTime;
+  if (!name || !language) {
+    return res.status(400).json({ message: 'Name and language are required.' });
+  }
 
-    if (!audioFile) {
-        res.status(400).json({ message: 'Audio file is required.' });
-        return;
-    }
+  try {
+    const user = new User({ name, language });
+    await user.save();
+    res.status(200).send({ message: 'User logged in successfully' });
+  } catch (error) {
+    console.error('Error saving user to database', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
-    if (!startTime || !endTime) {
-        res.status(400).json({ message: 'Start and end times are required.' });
-        return;
-    }
+// Configure multer for file upload handling
+const upload = multer({ dest: 'uploads/' });
 
-    // Parse and calculate the duration
-    const startSeconds = parseTimeStringToSeconds(startTime);
-    const endSeconds = parseTimeStringToSeconds(endTime);
-    const timeDuration = endSeconds - startSeconds;
+app.post('/api/transcribe', upload.single('file'), (req, res) => {
+  const audioFile = req.file;
 
-    try {
-        const audioFile = req.file;
-        if (!audioFile) {
-            return res.status(400).json({ error: 'No audio file provided' });
+  if (!audioFile) {
+    return res.status(400).json({ message: 'Audio file is required.' });
+  }
+
+  // Path to the saved audio file
+  const filePath = audioFile.path;
+  const wavFilePath = `${filePath}.wav`;
+
+  // Convert audio file to WAV format
+  ffmpeg(filePath)
+    .setFfmpegPath(ffmpegPath)
+    .toFormat('wav')
+    .on('error', (error) => {
+      console.error(`Error converting file: ${error}`);
+      res.status(500).json({ message: 'Internal server error', error: error.message });
+    })
+    .on('end', () => {
+      // Call the Python script to transcribe the audio
+      exec(`python3 real_time_transcription.py ${wavFilePath}`, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Error executing script: ${error}`);
+          return res.status(500).json({ message: 'Internal server error', error: error.message });
         }
-        const audioStream = bufferToStream(audioFile.buffer);
+        console.log(`stdout: ${stdout}`);
+        console.error(`stderr: ${stderr}`);
+        if (stderr) {
+          return res.status(500).json({ message: 'Error during transcription', error: stderr });
+        }
+        res.json({ transcription: stdout.trim() });
+      });
+    })
+    .save(wavFilePath);
+});
 
-        const trimAudio = async (audioStream, endTime) => {
-            const tempFileName = `temp-${Date.now()}.mp3`;
-            const outputFileName = `output-${Date.now()}.mp3`;
+app.post('/api/translate', async (req, res) => {
+  const { text, language } = req.body;
 
-            return new Promise((resolve, reject) => {
-                audioStream.pipe(fs.createWriteStream(tempFileName))
-                    .on('finish', () => {
-                        ffmetadata.read(tempFileName, (err, metadata) => {
-                            if (err) reject(err);
-                            const duration = parseFloat(metadata.duration);
-                            if (endTime > duration) endTime = duration;
+  const getHeaders = () => {
+    return {
+      'Content-Type': 'application/json'
+    };
+  };
 
-                            ffmpeg(tempFileName)
-                                .setStartTime(startSeconds)
-                                .setDuration(timeDuration)
-                                .output(outputFileName)
-                                .on('end', () => {
-                                    fs.unlink(tempFileName, (err) => {
-                                        if (err) console.error('Error deleting temp file:', err);
-                                    });
+  const BACKEND_URI = 'https://dghq5z6zfvye5vk-api.blackwave-e0d1d49b.eastus.azurecontainerapps.io';
 
-                                    const trimmedAudioBuffer = fs.readFileSync(outputFileName);
-                                    fs.unlink(outputFileName, (err) => {
-                                        if (err) console.error('Error deleting output file:', err);
-                                    });
+  try {
+    const body = JSON.stringify({ text: text, target_language: language });
+    console.log("wer are here now.")
 
-                                    resolve(trimmedAudioBuffer);
-                                })
-                                .on('error', reject)
-                                .run();
-                        });
-                    })
-                    .on('error', reject);
-            });
-        };
+    const response = await fetch(`${BACKEND_URI}/translate`, {
+      method: 'POST',
+      mode: 'cors',
+      headers: getHeaders(),
+      body: body
+    });
 
-        const trimmedAudioBuffer = await trimAudio(audioStream, endTime);
-
-        // Call the OpenAI Whisper API to transcribe the audio file
-        const formData = new FormData();
-        formData.append('file', trimmedAudioBuffer, { filename: 'audio.mp3', contentType: audioFile.mimetype });
-        formData.append('model', 'whisper-1');
-        formData.append('response_format', 'json');
-
-
-        const config = {
-            headers: {
-                "Content-Type": `multipart/form-data; boundary=${formData._boundary}`,
-                "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-            },
-        };
-
-        const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, config);
-        const transcription = response.data.text;
-
-
-        res.json({ transcription });
-    } catch (error) {
-        res.status(500).json({ error: 'Error transcribing audio' });
+    if (!response.ok) {
+      throw new Error(`Request failed with status code ${response.status}`);
     }
+
+    const data = await response.json();
+    console.log(data);
+    res.json({ translatedText: data.translated_text });
+  } catch (error) {
+    console.error('Error translating text LOL', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
 });
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
