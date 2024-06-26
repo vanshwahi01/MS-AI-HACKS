@@ -1,60 +1,34 @@
-import Header from './Header';
-import './App.css';
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
-import TimePicker from './TimePicker';
+import { BrowserRouter as Router, Route, Routes, useNavigate, useLocation } from 'react-router-dom';
+import './App.css';
+import Header from './Header';
 import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
-// Helper function for conversion from time to seconds
-const timeToSeconds = (time) => {
-  const [hours, minutes, seconds] = time.split(':').map((v) => parseInt(v, 10));
-  return hours * 3600 + minutes * 60 + seconds;
+// Landing Page Component
+const LandingPage = () => {
+  const navigate = useNavigate();
+
+  return (
+    <div className="landing-page">
+      <h1>Welcome to Access Abilities</h1>
+      <div>
+        <button className="mr-4" onClick={() => navigate('/transcribe')}>Record Audio</button>
+        <button onClick={() => navigate('/transcribe')}>Upload Audio</button>
+      </div>
+    </div>
+  );
 };
 
-// Helper function for conversion from seconds to time
-const secondsToTime = (totalSeconds) => {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-};
 
-// Helper function for conversion from time to minutes and seconds
-const timeToMinutesAndSeconds = (time) => {
-  const totalSeconds = timeToSeconds(time);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-};
-
-const App = () => {
+// Transcription Page Component
+const TranscriptionPage = () => {
   const [uploading, setUploading] = useState(false);
   const [transcription, setTranscription] = useState('');
   const [audioFile, setAudioFile] = useState(null);
-  const [startTime, setStartTime] = useState('00:00:00');
-  const [endTime, setEndTime] = useState('00:10:00'); // 10 minutes default endtime
-  const [audioDuration, setAudioDuration] = useState(null);
-
-  const handleStartTimeChange = (newStartTime) => {
-    const startTimeSeconds = timeToSeconds(newStartTime);
-    const endTimeSeconds = timeToSeconds(endTime);
-
-    if (startTimeSeconds >= endTimeSeconds) {
-      const newEndTimeSeconds = Math.min(startTimeSeconds + 600, audioDuration || 0);
-      const newEndTime = secondsToTime(newEndTimeSeconds);
-      setEndTime(newEndTime);
-    }
-
-    setStartTime(newStartTime);
-  };
-
-  const getAudioDuration = (file) => {
-    const audio = new Audio(URL.createObjectURL(file));
-    audio.addEventListener('loadedmetadata', () => {
-      setAudioDuration(audio.duration);
-    });
-  };
+  const navigate = useNavigate();
 
   const onDrop = useCallback((acceptedFiles) => {
     if (acceptedFiles.length === 0) {
@@ -67,7 +41,6 @@ const App = () => {
     }
 
     setAudioFile(file);
-    getAudioDuration(file);
   }, []);
 
   const transcribeAudio = async () => {
@@ -76,8 +49,6 @@ const App = () => {
     try {
       const formData = new FormData();
       audioFile && formData.append('file', audioFile);
-      formData.append('startTime', timeToMinutesAndSeconds(startTime));
-      formData.append('endTime', timeToMinutesAndSeconds(endTime));
 
       const response = await axios.post(`http://localhost:3001/api/transcribe`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -99,9 +70,8 @@ const App = () => {
 
   return (
     <div className="container mx-auto py-12">
-      <Header />
       <ToastContainer />
-      <h1 className="text-4xl mb-6">Wrytr</h1>
+      <h1 className="text-4xl mb-6">Transcription</h1>
       <div
         {...getRootProps()}
         className={`dropzone p-6 border-2 border-dashed rounded ${isDragActive ? 'border-green-500' : isDragReject ? 'border-red-500' : 'border-gray-300'
@@ -116,25 +86,86 @@ const App = () => {
           <p>Drag and drop an audio file here, or click to select a file</p>
         )}
       </div>
-      <div className="flex flex-col md:flex-row justify-center space-y-4 md:space-y-0 md:space-x-8 mt-2">
-        <TimePicker id="start-time" label="Start Time:" value={startTime} onChange={handleStartTimeChange} maxDuration={audioDuration || Infinity} />
-        <TimePicker id="end-time" label="End Time:" value={endTime} onChange={setEndTime} maxDuration={audioDuration || Infinity} />
-      </div>
       {uploading && <p className="mt-4">Uploading and transcribing...</p>}
       {transcription && (
         <div className="mt-4">
           <h2 className="text-2xl mb-2">Transcription:</h2>
           <p>{transcription}</p>
+          <button className="mt-4" onClick={() => navigate('/translate', { state: { transcription } })}>Translate</button>
         </div>
       )}
       <button
-        className="mt-4 bg-blue-500 text-white font-bold py-2 px-4 rounded"
+        className="mt-4"
         onClick={transcribeAudio}
         disabled={uploading || !audioFile}
       >
         Transcribe
       </button>
     </div>
+  );
+};
+
+// Translation Page Component
+const TranslationPage = () => {
+  const location = useLocation();
+  const [language, setLanguage] = useState('en');
+  const [translatedText, setTranslatedText] = useState('');
+  const transcription = location.state?.transcription || '';
+
+  const translateText = async () => {
+    try {
+      const response = await axios.post(`http://localhost:3001/api/translate`, {
+        text: transcription,
+        targetLang: language,
+      });
+
+      setTranslatedText(response.data.translatedText);
+      toast.success('Translation successful.')
+    } catch (error) {
+      toast.error('An error occurred during translation.');
+    }
+  };
+
+  return (
+    <div className="container mx-auto py-12">
+      <ToastContainer />
+      <h1 className="text-4xl mb-6">Translation</h1>
+      <div className="translation-box">
+        <h2 className="text-2xl mb-2">Transcription:</h2>
+        <p>{transcription}</p>
+        <h2 className="text-2xl mb-2">Translation:</h2>
+        <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="zh">Chinese</option>
+        </select>
+        <button onClick={translateText}>Translate</button>
+        {translatedText && (
+          <div className="mt-4">
+            <h2 className="text-2xl mb-2">Translated Text:</h2>
+            <p>{translatedText}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Main App Component
+const App = () => {
+  return (
+    <Router>
+      <div className="container mx-auto py-12">
+        <Header />
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/transcribe" element={<TranscriptionPage />} />
+          <Route path="/translate" element={<TranslationPage />} />
+        </Routes>
+      </div>
+    </Router>
   );
 };
 

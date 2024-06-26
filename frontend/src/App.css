@@ -1,38 +1,100 @@
-.App {
+/* App.css */
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f0f0f0; /* Light grey background for the entire page */
+  margin: 0;
+  padding: 0;
+  padding-top: 60px; /* To avoid content being hidden under fixed header */
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.dropzone {
+  background-color: #ffffff;
+  border-radius: 8px;
   text-align: center;
+  padding: 20px;
+  cursor: pointer;
+  transition: border-color 0.3s;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.dropzone p {
+  margin: 0;
+  color: #6c757d;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+button {
+  background-color: #007BFF;
   color: white;
+  border: none;
+  padding: 15px 30px;
+  font-size: 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s;
 }
 
-.App-link {
-  color: #61dafb;
+button:hover {
+  background-color: #0056b3;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.mt-4 {
+  margin-top: 16px;
+}
+
+.mb-6 {
+  margin-bottom: 24px;
+}
+
+.text-4xl {
+  font-size: 32px;
+  color: #333;
+}
+
+.text-2xl {
+  font-size: 24px;
+  color: #333;
+}
+
+.landing-page {
+  text-align: center;
+  padding: 40px 20px;
+  height: calc(100vh - 60px); /* Adjust to full height minus header */
+}
+
+.landing-page h1 {
+  font-size: 48px;
+  font-weight: bold;
+  margin-bottom: 40px;
+}
+
+.landing-page button {
+  margin: 10px;
+  padding: 20px 40px;
+  font-size: 20px;
+}
+
+.landing-page button:hover {
+  background-color: #0056b3;
+}
+
+.translation-box {
+  margin-top: 20px;
+  padding: 20px;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.translation-box select {
+  margin-bottom: 10px;
+  padding: 5px;
+}
+
+.translation-box button {
+  margin-top: 10px;
 }
