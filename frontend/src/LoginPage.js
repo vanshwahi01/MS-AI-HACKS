@@ -11,7 +11,7 @@ const LoginPage = ({ onLogin }) => {
     e.preventDefault();
 
     try {
-      const response = await axios.post(`http://localhost:3001/api/login`, { name, language });
+      const response = await axios.post(`https://speech-backend-otxqton76-cole-dermotts-projects.vercel.app/api/login`, { name, language });
       if (response.status === 200) {
         onLogin(); 
         navigate('/home');
