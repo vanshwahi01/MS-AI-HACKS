@@ -34,7 +34,7 @@ const TranscriptionPage = () => {
       const formData = new FormData();
       file && formData.append('file', file);
 
-      const response = await axios.post('http://localhost:3001/api/transcribe', formData, {
+      const response = await axios.post('https://speech-backend-otxqton76-cole-dermotts-projects.vercel.app/api/transcribe', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
